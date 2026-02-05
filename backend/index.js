@@ -31,15 +31,21 @@ const debugLog = (msg, data) => {
 };
 
 // MIDDLEWARE: Enable CORS
-const allowedOrigins = isProduction 
-    ? [process.env.FRONTEND_URL || 'https://your-frontend.vercel.app']
-    : ['http://localhost:5173', 'http://localhost:3000'];
+const allowedOrigins = [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    process.env.FRONTEND_URL,
+    'https://your-frontend.vercel.app'
+].filter(Boolean);
 
 app.use(cors({
     origin: function (origin, callback) {
-        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        // Or if the origin is in our allowed list
+        if (!origin || allowedOrigins.some(o => origin.startsWith(o)) || isProduction) {
             callback(null, true);
         } else {
+            console.log('CORS Blocked Origin:', origin);
             callback(new Error('Not allowed by CORS'));
         }
     },
