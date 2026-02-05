@@ -7,6 +7,7 @@ const connectDB = require('./config/db');
 const express = require("express"); // Imports the Express framework
 const cors = require('cors'); // Import CORS for frontend-backend communication
 const { body, param, validationResult } = require('express-validator');
+const jwt = require('jsonwebtoken');
 const app = express(); // Creates an instance of an Express application
 const PORT = process.env.PORT || 3000; // Use PORT from .env or default to 3000
 
@@ -15,88 +16,131 @@ connectDB();
 
 // IMPORT MODELS: Import our Mongoose models
 const Expense = require('./models/Expense');
-// IMPORT ERROR HANDLER
+const User = require('./models/User');
+
+// IMPORT MIDDLEWARE
+const auth = require('./middleware/auth');
 const errorHandler = require('./middleware/errorHandler');
 
-// MIDDLEWARE: Enable CORS for frontend (allow requests from React app)
+// LOGGING HELPERS
+const isProduction = process.env.NODE_ENV === 'production';
+const debugLog = (msg, data) => {
+    if (!isProduction) {
+        console.log(`[DEBUG] ${msg}`, data || '');
+    }
+};
+
+// MIDDLEWARE: Enable CORS
+const allowedOrigins = isProduction 
+    ? [process.env.FRONTEND_URL || 'https://your-frontend.vercel.app']
+    : ['http://localhost:5173', 'http://localhost:3000'];
+
 app.use(cors({
-    origin: 'http://localhost:5173', // Vite dev server
+    origin: function (origin, callback) {
+        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
     credentials: true
 }));
 
-// MIDDLEWARE: This allows the server to read JSON from the request body
+// MIDDLEWARE: JSON parsing
 app.use(express.json());
 
+// DEBUG REQUEST LOGGING
 app.use((req, res, next) => {
-    console.log(`[DEBUG] ${req.method} ${req.url}`);
+    debugLog(`${req.method} ${req.url}`);
     next();
 });
 
+// ========== AUTH ROUTES ==========
 
-// HOME ROUTE: A simple GET request to the root URL.
-app.get("/", (req, res) => {
-    res.json({ message: "Welcome to the Expense Tracker API" });
-});
+// REGISTER
+app.post("/api/register",
+    [
+        body('username').notEmpty().trim(),
+        body('email').isEmail().normalizeEmail(),
+        body('password').isLength({ min: 6 })
+    ],
+    async (req, res) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-// READ (ALL): GET request to fetch all expenses from database
-// READ (ALL): GET request to fetch all expenses with filtering and sorting
-app.get("/api/expenses", async (req, res) => {
+        try {
+            const { username, email, password } = req.body;
+            let user = await User.findOne({ email });
+            if (user) return res.status(400).json({ message: 'User already exists' });
+
+            user = new User({ username, email, password });
+            await user.save();
+
+            const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+            res.status(201).json({ token, user: { id: user._id, username: user.username, email: user.email } });
+        } catch (err) {
+            res.status(500).json({ message: 'Server error during registration' });
+        }
+    }
+);
+
+// LOGIN
+app.post("/api/login",
+    [
+        body('email').isEmail().normalizeEmail(),
+        body('password').exists()
+    ],
+    async (req, res) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+        try {
+            const { email, password } = req.body;
+            const user = await User.findOne({ email });
+            if (!user) return res.status(400).json({ message: 'Invalid credentials' });
+
+            const isMatch = await user.comparePassword(password);
+            if (!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
+
+            const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+            res.json({ token, user: { id: user._id, username: user.username, email: user.email } });
+        } catch (err) {
+            res.status(500).json({ message: 'Server error during login' });
+        }
+    }
+);
+
+// ========== EXPENSE ROUTES (Protected) ==========
+
+// READ (ALL)
+app.get("/api/expenses", auth, async (req, res) => {
     try {
-        // Step 1: Build a filter object
-        const filter = {};
+        const filter = { userId: req.user.userId };
+        if (req.query.category) filter.category = req.query.category;
         
-        // Step 2: If category is provided, add it to filter
-        if (req.query.category) {
-            filter.category = req.query.category;
-            console.log("Filter:", filter);
-        }
-        
-        // Step 3: Find expenses with the filter
         let query = Expense.find(filter);
+        if (req.query.sort) query = query.sort(req.query.sort);
         
-        // Step 4: If sort is provided, apply sorting
-        if (req.query.sort) {
-            query = query.sort(req.query.sort);
-        }
-        
-        // Step 5: Execute the query
         const expenses = await query;
-        
         res.json(expenses);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
 });
 
-// CREATE: POST request to add a new expense to database
-// CREATE: POST request with VALIDATION
-app.post("/api/expenses", 
-    // Validation rules (middleware array)
+// CREATE
+app.post("/api/expenses", auth,
     [
-        body('title')
-            .notEmpty().withMessage('Title is required')
-            .trim()
-            .isLength({ max: 100 }).withMessage('Title cannot exceed 100 characters'),
-        body('amount')
-            .notEmpty().withMessage('Amount is required')
-            .isNumeric().withMessage('Amount must be a number')
-            .isFloat({ min: 0 }).withMessage('Amount must be positive'),
-        body('category')
-            .optional()
-            .isIn(['Food', 'Transport', 'Entertainment', 'Bills', 'Other'])
-            .withMessage('Category must be one of: Food, Transport, Entertainment, Bills, Other')
+        body('title').notEmpty().trim(),
+        body('amount').isNumeric().isFloat({ min: 0 })
     ],
-    // Route handler
     async (req, res) => {
-        // Check for validation errors
         const errors = validationResult(req);
-        if (!errors.isEmpty()) {
-            return res.status(400).json({ errors: errors.array() });
-        }
+        if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-        // If validation passes, create expense
         try {
-            const newExpense = await Expense.create(req.body);
+            const expenseData = { ...req.body, userId: req.user.userId };
+            const newExpense = await Expense.create(expenseData);
             res.status(201).json(newExpense);
         } catch (error) {
             res.status(400).json({ message: error.message });
@@ -104,53 +148,27 @@ app.post("/api/expenses",
     }
 );
 
-// READ (ONE): GET request to fetch a single expense by ID
-// READ (ONE): GET request with ID VALIDATION
-app.get("/api/expenses/:id",
-    [param('id').isMongoId().withMessage('Invalid expense ID')],
+// DELETE
+app.delete("/api/expenses/:id", auth,
+    [param('id').isMongoId()],
     async (req, res) => {
         const errors = validationResult(req);
-        if (!errors.isEmpty()) {
-            return res.status(400).json({ errors: errors.array() });
-        }
+        if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
         try {
-            const expense = await Expense.findById(req.params.id);
-            if (!expense) {
-                return res.status(404).json({ message: "Expense not found" });
-            }
-            res.json(expense);
-        } catch (error) {
-            res.status(500).json({ message: error.message });
-        }
-    }
-);
-
-// DELETE: Remove an expense by its ID from database
-// DELETE: Remove expense with ID VALIDATION
-app.delete("/api/expenses/:id",
-    [param('id').isMongoId().withMessage('Invalid expense ID')],
-    async (req, res) => {
-        const errors = validationResult(req);
-        if (!errors.isEmpty()) {
-            return res.status(400).json({ errors: errors.array() });
-        }
-
-        try {
-            const expense = await Expense.findByIdAndDelete(req.params.id);
-            if (!expense) {
-                return res.status(404).json({ message: "Expense not found" });
-            }
+            const expense = await Expense.findOneAndDelete({ _id: req.params.id, userId: req.user.userId });
+            if (!expense) return res.status(404).json({ message: "Expense not found" });
             res.json({ message: "Expense deleted successfully", expense });
         } catch (error) {
             res.status(500).json({ message: error.message });
         }
     }
 );
-// ERROR HANDLING MIDDLEWARE (must be last!)
+
+// ERROR HANDLING
 app.use(errorHandler);
 
-// START SERVER: Tells the app to start listening for requests.
+// START SERVER
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
 });

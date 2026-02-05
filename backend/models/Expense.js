@@ -1,8 +1,11 @@
-// Import mongoose
 const mongoose = require('mongoose');
 
-// SCHEMA: Define the structure of an expense document
 const expenseSchema = new mongoose.Schema({
+    userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
+    },
     title: {
         type: String,
         required: [true, 'Please add a title'],
@@ -16,7 +19,12 @@ const expenseSchema = new mongoose.Schema({
     },
     category: {
         type: String,
-        enum: ['Food', 'Transport', 'Entertainment', 'Bills', 'Other'],
+        enum: [
+            'Food', 'Transport', 'Entertainment', 'Shopping', 'Bills', 
+            'Health', 'Education', 'Groceries', 'Rent', 'Utilities', 
+            'Insurance', 'Travel', 'Fitness', 'Subscriptions', 'Gifts', 
+            'Personal Care', 'Home', 'Pets', 'Charity', 'Other'
+        ],
         default: 'Other'
     },
     date: {
@@ -28,12 +36,9 @@ const expenseSchema = new mongoose.Schema({
         maxlength: [500, 'Description cannot be more than 500 characters']
     }
 }, {
-    timestamps: true  // Automatically adds createdAt and updatedAt fields
+    timestamps: true
 });
 
-// MODEL: Create the model from the schema
-// 'Expense' is the model name, MongoDB will create a collection called 'expenses'
 const Expense = mongoose.model('Expense', expenseSchema);
 
-// Export the model so we can use it in our routes
 module.exports = Expense;
