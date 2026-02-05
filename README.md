@@ -135,14 +135,14 @@ VITE_API_URL=http://localhost:3000
 
 ## 🚀 Deployment
 
-### Backend - Railway.app
+### Backend - NodeOps.ai
 
-1. Create new Project or Service
-2. Connect this repository: `KartikMantri/expense_tracker`
-3. Root directory: `backend`
-4. Build command: `npm install`
-5. Start command: `node index.js`
-6. Add environment variables
+1. Sign up at [nodeops.ai](https://nodeops.ai)
+2. Create a new Project and connect this repository: `KartikMantri/expense_tracker`
+3. Set **Root Directory** to `backend`
+4. Use **Build Command**: `npm install`
+5. Use **Start Command**: `node index.js`
+6. Add environment variables in the **Environment Variables** tab.
 
 ### Frontend - Vercel
 
