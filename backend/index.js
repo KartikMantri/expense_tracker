@@ -55,6 +55,11 @@ app.use((req, res, next) => {
     next();
 });
 
+// ========== TEST ROUTE ==========
+app.get("/", (req, res) => {
+    res.json({ message: "Expense Tracker API is running!" });
+});
+
 // ========== AUTH ROUTES ==========
 
 // REGISTER
