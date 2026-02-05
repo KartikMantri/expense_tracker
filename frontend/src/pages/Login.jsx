@@ -19,7 +19,13 @@ function Login({ onLoginSuccess, onSwitchToRegister }) {
       localStorage.setItem('user', JSON.stringify(response.user));
       onLoginSuccess(response.user);
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed. Please try again.');
+      let errorMessage = 'Login failed. Please try again.';
+      if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      } else if (err.request) {
+        errorMessage = `Cannot connect to server. Make sure backend is running at ${import.meta.env.VITE_API_URL || 'http://localhost:3000'}`;
+      }
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }

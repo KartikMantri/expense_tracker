@@ -55,7 +55,7 @@ function Register({ onRegisterSuccess, onSwitchToLogin }) {
         }
       } else if (err.request) {
         // Request made but no response
-        errorMessage = 'Cannot connect to server. Make sure backend is running on http://localhost:3000';
+        errorMessage = `Cannot connect to server. Make sure backend is running at ${import.meta.env.VITE_API_URL || 'http://localhost:3000'}`;
       } else {
         // Something else went wrong
         errorMessage = err.message || 'Unknown error occurred';
