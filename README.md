@@ -135,13 +135,13 @@ VITE_API_URL=http://localhost:3000
 
 ## 🚀 Deployment
 
-### Backend - Render.com
+### Backend - Railway.app
 
-1. Create new Web Service
-2. Connect this repository
+1. Create new Project or Service
+2. Connect this repository: `KartikMantri/expense_tracker`
 3. Root directory: `backend`
 4. Build command: `npm install`
-5. Start command: `npm start`
+5. Start command: `node index.js`
 6. Add environment variables
 
 ### Frontend - Vercel
